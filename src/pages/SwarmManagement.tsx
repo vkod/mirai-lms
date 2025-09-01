@@ -19,6 +19,7 @@ import {
   Tooltip,
   Badge,
   Empty,
+  App,
 } from 'antd';
 import {
   PlusOutlined,
@@ -45,6 +46,7 @@ import {
   HeartOutlined,
 } from '@ant-design/icons';
 import { useStore } from '../store/useStore';
+import { agentDojoAPI } from '../services/agentDojoApi';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -183,7 +185,9 @@ const SwarmManagement: React.FC = () => {
   const [editingSwarm, setEditingSwarm] = useState<AgentSwarm | null>(null);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [selectedEvents, setSelectedEvents] = useState<EventTrigger[]>([]);
+  const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const { modal } = App.useApp();
   const addNotification = useStore((state) => state.addNotification);
 
   // Mock data for initial swarms
@@ -379,9 +383,32 @@ const SwarmManagement: React.FC = () => {
     },
   ];
 
+  // Load swarms from API
+  const loadSwarms = async () => {
+    setLoading(true);
+    try {
+      console.log('Loading swarms from API...');
+      const apiSwarms = await agentDojoAPI.getSwarms();
+      console.log('API Swarms received:', apiSwarms);
+      const uiSwarms = apiSwarms.map((s: any) => agentDojoAPI.convertToUIFormat(s));
+      console.log('Converted to UI format:', uiSwarms);
+      
+      // Only use API data, no mock data
+      setSwarms(uiSwarms);
+      setFilteredSwarms(uiSwarms);
+    } catch (error) {
+      console.error('Failed to load swarms:', error);
+      // Only use mock data if API is completely unavailable
+      addNotification({ type: 'warning', message: 'Failed to load swarms from API, using offline mode' });
+      setSwarms([]);
+      setFilteredSwarms([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setSwarms(mockSwarms);
-    setFilteredSwarms(mockSwarms);
+    loadSwarms();
   }, []);
 
   useEffect(() => {
@@ -438,27 +465,61 @@ const SwarmManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    Modal.confirm({
+    console.log('Delete clicked for swarm ID:', id);
+    modal.confirm({
       title: 'Delete Agent Swarm',
       content: 'Are you sure you want to delete this agent swarm? This action cannot be undone.',
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
       onOk: async () => {
-        setSwarms(prev => prev.filter(s => s.id !== id));
-        addNotification({ type: 'success', message: 'Agent swarm deleted successfully' });
+        console.log('Delete confirmed for ID:', id);
+        try {
+          const numericId = parseInt(id);
+          if (!isNaN(numericId)) {
+            await agentDojoAPI.deleteSwarm(numericId);
+            addNotification({ type: 'success', message: 'Agent swarm deleted successfully' });
+            // Reload swarms from API to ensure consistency
+            await loadSwarms();
+          } else {
+            addNotification({ type: 'error', message: 'Cannot delete mock swarm' });
+          }
+        } catch (error) {
+          console.error('Failed to delete swarm:', error);
+          addNotification({ type: 'error', message: 'Failed to delete agent swarm' });
+        }
+      },
+      onCancel: () => {
+        console.log('Delete cancelled');
       },
     });
   };
 
   const handleDeploy = (swarm: AgentSwarm) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Deploy Agent Swarm',
       content: `Deploy "${swarm.name}" to production? The swarm will start processing leads immediately.`,
       onOk: async () => {
-        setSwarms(prev => prev.map(s => 
-          s.id === swarm.id 
-            ? { ...s, status: 'deployed', deployment: { ...s.deployment, lastDeployed: new Date().toISOString() } }
-            : s
-        ));
-        addNotification({ type: 'success', message: 'Agent swarm deployed successfully' });
+        try {
+          const numericId = parseInt(swarm.id);
+          if (!isNaN(numericId)) {
+            const deployed = await agentDojoAPI.deploySwarm(numericId);
+            const uiSwarm = agentDojoAPI.convertToUIFormat(deployed);
+            setSwarms(prev => prev.map(s => 
+              s.id === swarm.id ? { ...s, ...uiSwarm, status: 'deployed' } : s
+            ));
+          } else {
+            // For mock data
+            setSwarms(prev => prev.map(s => 
+              s.id === swarm.id 
+                ? { ...s, status: 'deployed', deployment: { ...s.deployment, lastDeployed: new Date().toISOString() } }
+                : s
+            ));
+          }
+          addNotification({ type: 'success', message: 'Agent swarm deployed successfully' });
+        } catch (error: any) {
+          addNotification({ type: 'error', message: error.message || 'Failed to deploy swarm' });
+        }
       },
     });
   };
@@ -486,28 +547,63 @@ const SwarmManagement: React.FC = () => {
       };
       
       if (editingSwarm) {
-        setSwarms(prev => prev.map(swarm => 
-          swarm.id === editingSwarm.id ? { ...swarm, ...swarmData, modified: new Date().toISOString() } : swarm
-        ));
+        const numericId = parseInt(editingSwarm.id);
+        if (!isNaN(numericId)) {
+          // Update via API
+          const apiSwarm = agentDojoAPI.convertToAPIFormat(swarmData);
+          const updated = await agentDojoAPI.updateSwarm(numericId, apiSwarm);
+          const uiSwarm = agentDojoAPI.convertToUIFormat(updated);
+          setSwarms(prev => prev.map(swarm => 
+            swarm.id === editingSwarm.id ? { ...swarm, ...uiSwarm } : swarm
+          ));
+        } else {
+          // Mock data update
+          setSwarms(prev => prev.map(swarm => 
+            swarm.id === editingSwarm.id ? { ...swarm, ...swarmData, modified: new Date().toISOString() } : swarm
+          ));
+        }
         addNotification({ type: 'success', message: 'Agent swarm updated successfully' });
       } else {
-        const newSwarm: AgentSwarm = {
-          ...swarmData as AgentSwarm,
-          id: Date.now().toString(),
-          status: 'training',
-          agents: [], // System will assign agents automatically
-          performance: {
-            totalProcessed: 0,
-            successRate: 0,
-            avgResponseTime: 0,
-            leadConversion: 0,
-            customerSatisfaction: 0,
-          },
-          created: new Date().toISOString(),
-          modified: new Date().toISOString(),
-        };
-        setSwarms(prev => [...prev, newSwarm]);
-        addNotification({ type: 'success', message: 'Agent swarm created successfully' });
+        // Create new swarm via API
+        try {
+          const apiSwarm = agentDojoAPI.convertToAPIFormat(swarmData);
+          const created = await agentDojoAPI.createSwarm(apiSwarm);
+          const uiSwarm = agentDojoAPI.convertToUIFormat(created);
+          
+          // Add UI-specific fields
+          const newSwarm: AgentSwarm = {
+            ...uiSwarm,
+            agents: [], // System will assign agents automatically
+            performance: {
+              totalProcessed: 0,
+              successRate: 0,
+              avgResponseTime: 0,
+              leadConversion: 0,
+              customerSatisfaction: 0,
+            },
+          };
+          setSwarms(prev => [...prev, newSwarm]);
+          addNotification({ type: 'success', message: 'Agent swarm created successfully' });
+        } catch (error) {
+          // Fallback to local creation
+          const newSwarm: AgentSwarm = {
+            ...swarmData as AgentSwarm,
+            id: Date.now().toString(),
+            status: 'training',
+            agents: [],
+            performance: {
+              totalProcessed: 0,
+              successRate: 0,
+              avgResponseTime: 0,
+              leadConversion: 0,
+              customerSatisfaction: 0,
+            },
+            created: new Date().toISOString(),
+            modified: new Date().toISOString(),
+          };
+          setSwarms(prev => [...prev, newSwarm]);
+          addNotification({ type: 'success', message: 'Agent swarm created successfully (offline)' });
+        }
       }
       
       setModalVisible(false);
@@ -663,10 +759,23 @@ const SwarmManagement: React.FC = () => {
               <Button
                 size="small"
                 icon={<PauseCircleOutlined />}
-                onClick={() => {
-                  setSwarms(prev => prev.map(s => 
-                    s.id === record.id ? { ...s, status: 'inactive' } : s
-                  ));
+                onClick={async () => {
+                  try {
+                    const numericId = parseInt(record.id);
+                    if (!isNaN(numericId)) {
+                      await agentDojoAPI.pauseSwarm(numericId);
+                      setSwarms(prev => prev.map(s => 
+                        s.id === record.id ? { ...s, status: 'paused' as any } : s
+                      ));
+                    } else {
+                      setSwarms(prev => prev.map(s => 
+                        s.id === record.id ? { ...s, status: 'inactive' } : s
+                      ));
+                    }
+                    addNotification({ type: 'success', message: 'Agent swarm paused' });
+                  } catch (error: any) {
+                    addNotification({ type: 'error', message: error.message || 'Failed to pause swarm' });
+                  }
                 }}
               >
                 Pause
@@ -682,7 +791,11 @@ const SwarmManagement: React.FC = () => {
             type="text"
             danger
             icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log('Delete button clicked, record:', record);
+              handleDelete(record.id);
+            }}
           />
         </Space>
       ),
@@ -722,6 +835,7 @@ const SwarmManagement: React.FC = () => {
           columns={columns}
           dataSource={filteredSwarms}
           rowKey="id"
+          loading={loading}
           pagination={{ pageSize: 10 }}
         />
       </Card>

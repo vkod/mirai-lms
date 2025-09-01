@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Delete Function</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f0f2f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        h1 { color: #1890ff; }
+        .swarm-item {
+            padding: 15px;
+            margin: 10px 0;
+            border: 1px solid #e8e8e8;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .swarm-info {
+            flex: 1;
+        }
+        button {
+            background: #ff4d4f;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        button:hover {
+            background: #ff7875;
+        }
+        .create-btn {
+            background: #52c41a;
+        }
+        .create-btn:hover {
+            background: #73d13d;
+        }
+        .refresh-btn {
+            background: #1890ff;
+        }
+        .refresh-btn:hover {
+            background: #40a9ff;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #f6ffed;
+            color: #52c41a;
+            border: 1px solid #b7eb8f;
+        }
+        .error {
+            background: #fff2e8;
+            color: #ff4d4f;
+            border: 1px solid #ffccc7;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Delete Function</h1>
+        
+        <div id="status"></div>
+        
+        <div style="margin: 20px 0;">
+            <button class="refresh-btn" onclick="loadSwarms()">Refresh List</button>
+            <button class="create-btn" onclick="createTestSwarm()">Create Test Swarm</button>
+        </div>
+        
+        <h2>Current Swarms:</h2>
+        <div id="swarms-list"></div>
+        
+        <h2>Console Output:</h2>
+        <pre id="console-output"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let consoleLog = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            consoleLog.push(logMessage);
+            document.getElementById('console-output').textContent = consoleLog.join('\n');
+            console.log(message);
+        }
+        
+        async function loadSwarms() {
+            log('Loading swarms...');
+            const statusDiv = document.getElementById('status');
+            const listDiv = document.getElementById('swarms-list');
+            
+            try {
+                const response = await fetch(`${API_BASE}/swarms`);
+                const swarms = await response.json();
+                log(`Loaded ${swarms.length} swarms`);
+                
+                statusDiv.innerHTML = `<div class="status success">✅ Loaded ${swarms.length} swarms</div>`;
+                
+                if (swarms.length === 0) {
+                    listDiv.innerHTML = '<div class="swarm-item">No swarms found. Create one!</div>';
+                } else {
+                    listDiv.innerHTML = swarms.map(swarm => `
+                        <div class="swarm-item">
+                            <div class="swarm-info">
+                                <strong>${swarm.name}</strong> (ID: ${swarm.id})<br>
+                                <small>${swarm.description || 'No description'}</small><br>
+                                <small>Status: ${swarm.status}</small>
+                            </div>
+                            <button onclick="deleteSwarm(${swarm.id}, '${swarm.name.replace(/'/g, "\\'")}')">
+                                Delete
+                            </button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                log(`Error loading swarms: ${error.message}`);
+                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function deleteSwarm(id, name) {
+            log(`Delete button clicked for swarm ID: ${id}, Name: ${name}`);
+            
+            if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+                log('Delete cancelled by user');
+                return;
+            }
+            
+            log(`Deleting swarm ${id}...`);
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                const response = await fetch(`${API_BASE}/swarms/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                log(`Delete successful: ${result.message}`);
+                statusDiv.innerHTML = `<div class="status success">✅ ${result.message}</div>`;
+                
+                // Reload the list
+                setTimeout(() => loadSwarms(), 500);
+            } catch (error) {
+                log(`Delete failed: ${error.message}`);
+                statusDiv.innerHTML = `<div class="status error">❌ Delete failed: ${error.message}</div>`;
+            }
+        }
+        
+        async function createTestSwarm() {
+            log('Creating test swarm...');
+            const statusDiv = document.getElementById('status');
+            
+            const swarmData = {
+                name: `Test Swarm ${Date.now()}`,
+                description: "Created for delete testing",
+                config: { goal: "Test delete functionality" },
+                agents: [],
+                status: "draft"
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/swarms`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(swarmData)
+                });
+                
+                const created = await response.json();
+                log(`Created swarm with ID: ${created.id}`);
+                statusDiv.innerHTML = `<div class="status success">✅ Created swarm: ${created.name}</div>`;
+                
+                // Reload the list
+                setTimeout(() => loadSwarms(), 500);
+            } catch (error) {
+                log(`Create failed: ${error.message}`);
+                statusDiv.innerHTML = `<div class="status error">❌ Create failed: ${error.message}</div>`;
+            }
+        }
+        
+        // Load swarms on page load
+        window.onload = () => {
+            loadSwarms();
+        };
+    </script>
+</body>
+</html>
