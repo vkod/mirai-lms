@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Table, 
   Button, 
@@ -44,9 +45,12 @@ import {
   UserOutlined,
   ShoppingCartOutlined,
   HeartOutlined,
+  EyeOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import { useStore } from '../store/useStore';
 import { agentDojoAPI } from '../services/agentDojoApi';
+import { toolsApi } from '../services/api';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -103,16 +107,12 @@ interface AgentSwarm {
   modified: string;
 }
 
-const availableTools = [
-  { id: 'crm_integration', name: 'CRM Integration', icon: <DatabaseOutlined />, description: 'Access and update CRM records' },
-  { id: 'email_sender', name: 'Email Automation', icon: <ApiOutlined />, description: 'Send personalized emails' },
-  { id: 'calendar_scheduler', name: 'Calendar Scheduler', icon: <BookOutlined />, description: 'Schedule meetings and follow-ups' },
-  { id: 'lead_scorer', name: 'Lead Scoring', icon: <AimOutlined />, description: 'Evaluate and score leads' },
-  { id: 'sentiment_analyzer', name: 'Sentiment Analysis', icon: <ExperimentOutlined />, description: 'Analyze customer sentiment' },
-  { id: 'data_enrichment', name: 'Data Enrichment', icon: <DatabaseOutlined />, description: 'Enrich lead data from external sources' },
-  { id: 'chat_interface', name: 'Chat Interface', icon: <RobotOutlined />, description: 'Engage in real-time conversations' },
-  { id: 'report_generator', name: 'Report Generator', icon: <BookOutlined />, description: 'Generate analytical reports' },
-];
+interface AvailableTool {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  description: string;
+}
 
 
 const eventCategories = {
@@ -178,6 +178,7 @@ const eventCategories = {
 };
 
 const SwarmManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [swarms, setSwarms] = useState<AgentSwarm[]>([]);
   const [filteredSwarms, setFilteredSwarms] = useState<AgentSwarm[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -186,6 +187,7 @@ const SwarmManagement: React.FC = () => {
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [selectedEvents, setSelectedEvents] = useState<EventTrigger[]>([]);
   const [loading, setLoading] = useState(false);
+  const [availableTools, setAvailableTools] = useState<AvailableTool[]>([]);
   const [form] = Form.useForm();
   const { modal } = App.useApp();
   const addNotification = useStore((state) => state.addNotification);
@@ -407,8 +409,38 @@ const SwarmManagement: React.FC = () => {
     }
   };
 
+  const getToolIcon = (category: string | null) => {
+    const iconMap: Record<string, React.ReactNode> = {
+      'Information Retrieval': <DatabaseOutlined />,
+      'Communication': <ApiOutlined />,
+      'Computation': <ExperimentOutlined />,
+      'Analytics': <LineChartOutlined />,
+      'System': <ToolOutlined />,
+      'Data Management': <DatabaseOutlined />,
+      'Automation': <RobotOutlined />,
+      'Integration': <ApiOutlined />,
+    };
+    return iconMap[category || ''] || <ToolOutlined />;
+  };
+
+  const loadTools = async () => {
+    try {
+      const tools = await toolsApi.getTools();
+      const formattedTools: AvailableTool[] = tools.map(tool => ({
+        id: tool.name,
+        name: tool.name,
+        icon: getToolIcon(tool.category),
+        description: tool.description,
+      }));
+      setAvailableTools(formattedTools);
+    } catch (error) {
+      console.error('Failed to load tools:', error);
+    }
+  };
+
   useEffect(() => {
     loadSwarms();
+    loadTools();
   }, []);
 
   useEffect(() => {
@@ -638,7 +670,9 @@ const SwarmManagement: React.FC = () => {
           <Space>
             <RobotOutlined style={{ fontSize: 20, color: '#1890ff' }} />
             <div>
-              <strong>{text}</strong>
+              <a onClick={() => navigate(`/swarms/${record.id}`)} style={{ fontWeight: 'bold' }}>
+                {text}
+              </a>
               <div style={{ fontSize: 12, color: '#666' }}>{record.goal}</div>
             </div>
           </Space>
@@ -742,6 +776,13 @@ const SwarmManagement: React.FC = () => {
       key: 'actions',
       render: (_: any, record: AgentSwarm) => (
         <Space size="middle">
+          <Tooltip title="View Details">
+            <Button
+              type="text"
+              icon={<EyeOutlined />}
+              onClick={() => navigate(`/swarms/${record.id}`)}
+            />
+          </Tooltip>
           {record.status === 'ready' && (
             <Tooltip title="Deploy">
               <Button
@@ -837,6 +878,10 @@ const SwarmManagement: React.FC = () => {
           rowKey="id"
           loading={loading}
           pagination={{ pageSize: 10 }}
+          onRow={(record) => ({
+            onClick: () => navigate(`/swarms/${record.id}`),
+            style: { cursor: 'pointer' },
+          })}
         />
       </Card>
 

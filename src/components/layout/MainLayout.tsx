@@ -24,6 +24,7 @@ import {
   LogoutOutlined,
   MoonOutlined,
   SunOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { useStore } from '../../store/useStore';
 import './MainLayout.css';
@@ -54,6 +55,11 @@ const MainLayout: React.FC = () => {
       key: '/swarms',
       icon: <ClusterOutlined />,
       label: 'Agent Dojo',
+    },
+    {
+      key: '/tools',
+      icon: <ToolOutlined />,
+      label: 'Tools Management',
     },
     {
       key: '/training-data',

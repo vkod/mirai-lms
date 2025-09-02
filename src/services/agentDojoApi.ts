@@ -157,7 +157,15 @@ class AgentDojoAPI {
       description: uiSwarm.description || uiSwarm.goal,
       config: {
         goal: uiSwarm.goal,
-        tools: uiSwarm.tools || [],
+        purpose: uiSwarm.goal,
+        tools: uiSwarm.tools?.map((toolId: string) => ({
+          name: toolId,
+          description: '',
+        })) || [],
+        events: uiSwarm.eventTriggers?.map((trigger: any) => ({
+          name: trigger.name || trigger.subType,
+          description: `${trigger.type}: ${trigger.subType}`,
+        })) || [],
         eventTriggers: uiSwarm.eventTriggers || [],
         deployment: uiSwarm.deployment || {},
         trainingDataset: uiSwarm.trainingDataset || {},

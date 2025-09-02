@@ -3,6 +3,8 @@ import { ConfigProvider, App as AntApp } from 'antd';
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
 import SwarmManagement from './pages/SwarmManagement';
+import SwarmDetailV2 from './pages/SwarmDetailV2';
+import ToolsManagement from './pages/ToolsManagement';
 import TrainingData from './pages/TrainingData';
 import AgentDecisions from './pages/AgentDecisions';
 import SystemLogs from './pages/SystemLogs';
@@ -30,6 +32,8 @@ function App() {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="swarms" element={<SwarmManagement />} />
+                <Route path="swarms/:id" element={<SwarmDetailV2 />} />
+                <Route path="tools" element={<ToolsManagement />} />
                 <Route path="training-data" element={<TrainingData />} />
                 <Route path="agent-decisions" element={<AgentDecisions />} />
                 <Route path="system-logs" element={<SystemLogs />} />
